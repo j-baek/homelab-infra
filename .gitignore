@@ -1,2 +1,59 @@
-**/.terraform
+# =====================================================================
+# Terraform
+# =====================================================================
 
+# Provider plugins and module cache — the directory itself is never committed
+# NOTE: .terraform.lock.hcl is intentionally NOT ignored; commit it so every
+# collaborator and CI run gets the exact same provider version and checksum.
+**/.terraform/
+
+# State files — contain resource IDs, sensitive outputs, and infrastructure secrets
+terraform/terraform.tfstate
+terraform/terraform.tfstate.backup
+terraform/.terraform.tfstate.lock.info
+
+# Secrets (k3s token + SSH authorized keys)
+terraform/terraform.tfvars
+
+# Saved plan files
+**/*.tfplan
+**/*.plan
+
+# Terraform crash logs
+crash.log
+crash.*.log
+
+# Local override files — machine-specific tweaks not meant for the team
+terraform/override.tf
+terraform/override.tf.json
+terraform/*_override.tf
+terraform/*_override.tf.json
+
+# =====================================================================
+# Secrets and credentials
+# =====================================================================
+
+.env
+.env.*
+*.pem
+*.key
+*.p12
+*.pfx
+kubeconfig
+*.kubeconfig
+k3s-config
+
+# =====================================================================
+# Editor and OS noise
+# =====================================================================
+
+.DS_Store
+._*
+Thumbs.db
+desktop.ini
+
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
