@@ -18,8 +18,57 @@ resource "libvirt_volume" "ubuntu_base" {
 
 ### k3s cluster nodes
 # 1 server (control plane) + 2 agents (workers)
+# Each node gets a fixed MAC + IP so the network's DHCP always hands out
+# the same address, and agents can reliably find the server.
 locals {
-  k3s_nodes = toset(["server", "agent-1", "agent-2"])
+  k3s_nodes = {
+    server  = { mac = "52:54:00:12:34:10", ip = "192.168.100.10" }
+    agent-1 = { mac = "52:54:00:12:34:11", ip = "192.168.100.11" }
+    agent-2 = { mac = "52:54:00:12:34:12", ip = "192.168.100.12" }
+  }
+}
+
+### Dedicated virtual network for the k3s cluster
+# Separate from libvirt's "default" network (192.168.122.0/24) so we can
+# control the DHCP range and reserve fixed IPs without any collision risk.
+resource "libvirt_network" "k3s_net" {
+  name      = "k3s-net"
+  autostart = true
+
+  forward = {
+    mode = "nat"
+  }
+
+  bridge = {
+    name = "virbr-k3s"
+  }
+
+  ips = [
+    {
+      family  = "ipv4"
+      address = "192.168.100.1"
+      netmask = "255.255.255.0"
+
+      dhcp = {
+        # Dynamic pool for anything that doesn't have a reservation below.
+        ranges = [
+          {
+            start = "192.168.100.100"
+            end   = "192.168.100.200"
+          }
+        ]
+
+        # Static reservations: each node's MAC always gets the same IP.
+        hosts = [
+          for name, node in local.k3s_nodes : {
+            name = name
+            mac  = node.mac
+            ip   = node.ip
+          }
+        ]
+      }
+    }
+  ]
 }
 
 ### Overlay disk per node
