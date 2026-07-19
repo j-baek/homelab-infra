@@ -16,13 +16,21 @@ resource "libvirt_volume" "ubuntu_base" {
   }
 }
 
-### Overlay disk for k3s VM
-# The actual disk the VM will use.
-# It only stores what changes, and the base (ubuntu) stays untouched.
+### k3s cluster nodes
+# 1 server (control plane) + 2 agents (workers)
+locals {
+  k3s_nodes = toset(["server", "agent-1", "agent-2"])
+}
+
+### Overlay disk per node
+# Each node gets its own disk. It only stores what changes,
+# and the base (ubuntu) image stays untouched.
 resource "libvirt_volume" "k3s_disk" {
-  name     = "k3s.qcow2"
+  for_each = local.k3s_nodes
+
+  name     = "${each.key}.qcow2"
   pool     = "default"
-  capacity = 107374182400 # 100 GB storage for VM
+  capacity = 32212254720 # 30 GB storage per VM
 
   backing_store = {
     path = libvirt_volume.ubuntu_base.path
