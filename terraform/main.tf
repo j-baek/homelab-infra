@@ -50,13 +50,14 @@ resource "libvirt_network" "k3s_net" {
       netmask = "255.255.255.0"
 
       dhcp = {
-        # Dynamic pool for anything that doesn't have a reservation below.
-        ranges = [
-          {
-            start = "192.168.100.100"
-            end   = "192.168.100.200"
-          }
-        ]
+        ## Optional: define a range of IPs to hand out via DHCP, which won't get static IP,
+        ## used for test/temporary nodes that don't require a fixed IP.
+        #ranges = [
+          #{
+            #start = "192.168.100.100"
+            #end   = "192.168.100.200"
+          #}
+        #]
 
         # Static reservations: each node's MAC always gets the same IP.
         hosts = [
