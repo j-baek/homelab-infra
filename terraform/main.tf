@@ -1,7 +1,7 @@
 ### Base volume ### 
 # Download Ubuntu 24.04 cloud image and store it as a base volume.
 resource "libvirt_volume" "ubuntu_base" {
-  name = "ubuntu-24.04-base.qcow2"
+  name = var.ubuntu_base_name
   pool = "default"
   target = {
     format = {
@@ -11,7 +11,7 @@ resource "libvirt_volume" "ubuntu_base" {
 
   create = {
     content = {
-      url = "https://cloud-images.ubuntu.com/releases/24.04/release/ubuntu-24.04-server-cloudimg-amd64.img"
+      url = var.ubuntu_base_url
     }
   }
 }
@@ -25,6 +25,26 @@ locals {
     server  = { mac = "52:54:00:12:34:10", ip = "192.168.100.10" }
     agent-1 = { mac = "52:54:00:12:34:11", ip = "192.168.100.11" }
     agent-2 = { mac = "52:54:00:12:34:12", ip = "192.168.100.12" }
+  }
+
+  ssh_public_key = trimspace(file(pathexpand("~/.ssh/id_ed25519.pub")))
+}
+
+### Overlay disk per node
+# Each node gets its own disk. It only stores what changes,
+# and the base (ubuntu) image stays untouched.
+resource "libvirt_volume" "k3s_disk" {
+  for_each = local.k3s_nodes
+
+  name     = "${each.key}-qcow2"
+  pool     = "default"
+  capacity = var.per_vm_storage
+
+  backing_store = {
+    path = libvirt_volume.ubuntu_base.path
+    format = {
+      type = "qcow2"
+    }
   }
 }
 
@@ -53,10 +73,10 @@ resource "libvirt_network" "k3s_net" {
         ## Optional: define a range of IPs to hand out via DHCP, which won't get static IP,
         ## used for test/temporary nodes that don't require a fixed IP.
         #ranges = [
-          #{
-            #start = "192.168.100.100"
-            #end   = "192.168.100.200"
-          #}
+        #{
+        #start = "192.168.100.100"
+        #end   = "192.168.100.200"
+        #}
         #]
 
         # Static reservations: each node's MAC always gets the same IP.
@@ -70,22 +90,4 @@ resource "libvirt_network" "k3s_net" {
       }
     }
   ]
-}
-
-### Overlay disk per node
-# Each node gets its own disk. It only stores what changes,
-# and the base (ubuntu) image stays untouched.
-resource "libvirt_volume" "k3s_disk" {
-  for_each = local.k3s_nodes
-
-  name     = "${each.key}.qcow2"
-  pool     = "default"
-  capacity = 32212254720 # 30 GB storage per VM
-
-  backing_store = {
-    path = libvirt_volume.ubuntu_base.path
-    format = {
-      type = "qcow2"
-    }
-  }
 }
