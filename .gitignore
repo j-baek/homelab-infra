@@ -57,3 +57,7 @@ desktop.ini
 *.swp
 *.swo
 *~
+# Private plans, SSH host keys, kubeconfigs, and backups from lab helpers.
+.local/
+**/cloudinit_*.iso
+**/__pycache__/

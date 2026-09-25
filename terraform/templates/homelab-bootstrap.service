@@ -1,0 +1,17 @@
+[Unit]
+Description=Install the pinned homelab k3s release on first boot
+Wants=network-online.target
+After=network-online.target cloud-final.service
+StartLimitIntervalSec=0
+ConditionPathExists=!/var/lib/homelab/bootstrap-complete
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/homelab-bootstrap
+Restart=on-failure
+RestartSec=30
+TimeoutStartSec=1800
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target

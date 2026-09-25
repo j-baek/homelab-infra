@@ -29,36 +29,38 @@
 
 ## Project map and observed baseline
 
-Verified from workspace files on 2026-09-24; recheck before relying on this snapshot.
+Recheck current source and live results before relying on this snapshot.
 
-- Goal: a laptop homelab using KVM/QEMU/libvirt and Terraform to provision k3s VMs.
-- `terraform/` is the Terraform working directory. `provider.tf` selects
-  `qemu:///system`; `versions.tf` requires Terraform `~>1.15` and pins
-  `dmacvicar/libvirt` to `0.9.2`, matching `.terraform.lock.hcl`.
-- `main.tf` defines an Ubuntu 24.04 base volume, three overlay disks, and a NAT
-  network named `k3s-net` using bridge `virbr-k3s` and gateway `192.168.100.1/24`.
-  Node reservations are server `.10`, agent-1 `.11`, and agent-2 `.12`.
-- `variables.tf` declares the sensitive k3s token and image/storage inputs.
-  `per_vm_storage` defaults to 32212254720 bytes (30 GiB), despite its GB wording.
-  `main.tf` reads the public key at `~/.ssh/id_ed25519.pub`; verify its availability
-  when evaluating configuration without exposing private keys.
-- No VM domain resources, cloud-init templates/resources, or outputs currently
-  exist in the project source. `NOTES.md` describes some of these as though they
-  exist; that text does not establish implementation.
-- Local state inspected during this review records `libvirt_pool.default`, while
-  current source does not declare that resource. Investigate any proposed removal
-  before applying; the state snapshot does not establish live pool status.
-- Provider caches include versions other than the pinned version. Their presence
-  does not select them. Neither root `.terraform/` nor `terraform/.terraform/`
-  is source configuration.
-- `.github/workflows/gitleaks.yaml` configures secret scanning for pushes, pull
-  requests, and manual runs. Its existence does not prove a successful CI run.
+- Terraform lives in `terraform/`; the local connection is `qemu:///system`.
+  `versions.tf` and the lockfile select libvirt 0.9.2. Do not copy legacy syntax.
+- `main.tf` retains the shared `libvirt_pool.default` with `prevent_destroy`,
+  provisions an Ubuntu base, per-node qcow2 overlays, and the dedicated NAT network.
+  The shared pool contains an unrelated Debian image: preserve it.
+- `variables.tf` controls names, subnet, SSH access, version, and per-node budgets.
+  Defaults: one 4 GiB server and two 2 GiB agents, each with 2 vCPUs and 30 GiB disk.
+- `cloud-init.tf` and `templates/` configure first-boot access and a retryable
+  systemd installer. `domains.tf` creates/autostarts the VMs; `outputs.tf` exposes
+  non-secret inventory. Seed media and state contain the cluster join secret.
+- Cloud-init is initialization, not ongoing guest configuration management.
+  A changed template or k3s_version does not upgrade initialized guest disks.
+- `scripts/lab.py` provides live readiness, SSH, kubectl, smoke testing, private
+  kubeconfig export, and an on-demand SQLite/state backup with brief server downtime.
+  `.local/` holds private artifacts. Backups exclude application volume data.
+- `examples/smoke.yaml` is a removable nginx deployment and NodePort service.
+  `tests/test_lab.py` checks readiness failure cases.
+- `README.md` is the operating guide; `NOTES.md` explains design and recovery.
+- `.github/workflows/validate.yaml` checks configuration and helper tests;
+  `gitleaks.yaml` scans secrets. Configuration is not evidence of a passed CI run.
+- During deployment, all three nodes were observed Ready at .10/.11/.12 on
+  192.168.100.0/24. Always recheck health; this is not a permanent status guarantee.
 
 ## Working practices
 
 - Make focused changes, preserve unrelated user edits, and explain consequential
   choices in plain language. Update documentation when behavior changes.
-- Use `terraform -chdir=terraform ...` from the repository root. Check the actual
+- Use `scripts/tf.sh ...` for Terraform deployment: it restricts file permissions
+  and puts token-bearing provider seed ISOs in a private temporary directory.
+  The underlying command is `terraform -chdir=terraform ...`. Check the actual
   Terraform version and selected provider before relying on their behavior.
 - For libvirt attributes, inspect `terraform -chdir=terraform providers schema -json`
   when available and consult official documentation for the pinned version. Do not

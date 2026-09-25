@@ -1,0 +1,28 @@
+name: validate
+on:
+  pull_request:
+  push:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  configuration:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: hashicorp/setup-terraform@v4
+        with:
+          terraform_version: 1.15.6
+          terraform_wrapper: false
+      - name: Check Terraform formatting
+        run: terraform -chdir=terraform fmt -check -recursive
+      - name: Initialize pinned provider without backend access
+        run: terraform -chdir=terraform init -backend=false -input=false -lockfile=readonly
+      - name: Validate configuration
+        run: terraform -chdir=terraform validate
+      - name: Test rendered configuration without live infrastructure
+        run: terraform -chdir=terraform test
+      - name: Test readiness helper
+        run: python3 -m unittest discover -s tests -v
+      - name: Check bootstrap shell syntax
+        run: sh -n terraform/templates/bootstrap.sh.tftpl

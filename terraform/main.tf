@@ -1,93 +1,57 @@
-### Base volume ### 
-# Download Ubuntu 24.04 cloud image and store it as a base volume.
-resource "libvirt_volume" "ubuntu_base" {
-  name = var.ubuntu_base_name
-  pool = "default"
-  target = {
-    format = {
-      type = "qcow2"
-    }
-  }
-
-  create = {
-    content = {
-      url = var.ubuntu_base_url
-    }
-  }
-}
-
-### k3s cluster nodes
-# 1 server (control plane) + 2 agents (workers)
-# Each node gets a fixed MAC + IP so the network's DHCP always hands out
-# the same address, and agents can reliably find the server.
 locals {
-  k3s_nodes = {
-    server  = { mac = "52:54:00:12:34:10", ip = "192.168.100.10" }
-    agent-1 = { mac = "52:54:00:12:34:11", ip = "192.168.100.11" }
-    agent-2 = { mac = "52:54:00:12:34:12", ip = "192.168.100.12" }
-  }
-
-  ssh_public_key = trimspace(file(pathexpand("~/.ssh/id_ed25519.pub")))
+  ssh_public_key = trimspace(file(pathexpand(var.ssh_public_key_path)))
+  server_name    = one([for name, node in var.nodes : name if node.role == "server"])
+  node_ips       = { for name, node in var.nodes : name => cidrhost(var.network_cidr, node.host_number) }
+  server_ip      = local.node_ips[local.server_name]
 }
 
-### Overlay disk per node
-# Each node gets its own disk. It only stores what changes,
-# and the base (ubuntu) image stays untouched.
+# This shared pool predates the lab and contains unrelated images. Keep its
+# existing Terraform address; reject deletion/replacement while it is declared.
+resource "libvirt_pool" "default" {
+  name   = var.storage_pool_name
+  type   = "dir"
+  target = { path = var.storage_pool_path }
+  lifecycle {
+    prevent_destroy = true
+  }
+}
+
+# Overlays depend on this image for unchanged blocks. Do not overwrite or delete
+# the base while dependent disks exist. Downloading happens during creation only.
+resource "libvirt_volume" "ubuntu_base" {
+  name   = var.ubuntu_base_name
+  pool   = libvirt_pool.default.name
+  target = { format = { type = "qcow2" } }
+  create = { content = { url = var.ubuntu_base_url } }
+}
+
 resource "libvirt_volume" "k3s_disk" {
-  for_each = local.k3s_nodes
-
-  name     = "${each.key}-qcow2"
-  pool     = "default"
-  capacity = var.per_vm_storage
-
+  for_each = var.nodes
+  name     = "${var.cluster_name}-${each.key}.qcow2"
+  pool     = libvirt_pool.default.name
+  capacity = each.value.disk_gib * 1024 * 1024 * 1024
+  target   = { format = { type = "qcow2" } }
   backing_store = {
-    path = libvirt_volume.ubuntu_base.path
-    format = {
-      type = "qcow2"
-    }
+    path   = libvirt_volume.ubuntu_base.path
+    format = { type = "qcow2" }
   }
 }
 
-### Dedicated virtual network for the k3s cluster
-# Separate from libvirt's "default" network (192.168.122.0/24) so we can
-# control the DHCP range and reserve fixed IPs without any collision risk.
+# Guests use DHCP; matching MAC reservations make their addresses predictable.
+# Only declared nodes need addresses, so there is no unreserved DHCP range.
 resource "libvirt_network" "k3s_net" {
-  name      = "k3s-net"
+  name      = var.network_name
   autostart = true
-
-  forward = {
-    mode = "nat"
-  }
-
-  bridge = {
-    name = "virbr-k3s"
-  }
-
-  ips = [
-    {
-      family  = "ipv4"
-      address = "192.168.100.1"
-      netmask = "255.255.255.0"
-
-      dhcp = {
-        ## Optional: define a range of IPs to hand out via DHCP, which won't get static IP,
-        ## used for test/temporary nodes that don't require a fixed IP.
-        #ranges = [
-        #{
-        #start = "192.168.100.100"
-        #end   = "192.168.100.200"
-        #}
-        #]
-
-        # Static reservations: each node's MAC always gets the same IP.
-        hosts = [
-          for name, node in local.k3s_nodes : {
-            name = name
-            mac  = node.mac
-            ip   = node.ip
-          }
-        ]
-      }
-    }
-  ]
+  forward   = { mode = "nat" }
+  bridge    = { name = var.bridge_name }
+  ips = [{
+    family  = "ipv4"
+    address = cidrhost(var.network_cidr, 1)
+    netmask = cidrnetmask(var.network_cidr)
+    dhcp = { hosts = [for name, node in var.nodes : {
+      name = "${var.cluster_name}-${name}"
+      mac  = node.mac
+      ip   = local.node_ips[name]
+    }] }
+  }]
 }
