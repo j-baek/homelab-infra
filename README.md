@@ -24,7 +24,7 @@ are virtual maximums; copy-on-write allocation grows as guests write data.
   QEMU/libvirt installed and running.
 - Access to `qemu:///system` through `virsh` as your normal user.
 - Terraform satisfying `~> 1.15` (at least 1.15, below 2.0); tested CLI: 1.15.6.
-  The committed lockfile selects `dmacvicar/libvirt` 0.9.2.
+  The committed lockfile selects `dmacvicar/libvirt` 0.9.9.
 - Python 3, OpenSSH client, and `mkisofs`/`genisoimage` for cloud-init seed creation.
 - An active directory pool, default `/var/lib/libvirt/images`, with sufficient
   free space. Budget for all three growing disks, the base image, and backups.
@@ -247,8 +247,8 @@ or host firewall changes are made by this repository.
   autostart. Test after a planned host reboot; this is not implied by validation.
 - Use `python3 scripts/lab.py check` after maintenance and inspect disk usage before
   growing workloads. Guest disks share the host filesystem.
-- Provider 0.9.2 may stop/start a VM for an in-place configuration update. Schedule
-  downtime and check live state if apply reports a runtime domain-ID inconsistency.
+- Domain configuration updates may stop/start a VM even when Terraform reports an
+  in-place change. Schedule downtime and verify live state after applying.
 - Cloud-init runs during first boot. Editing its input is **not** an upgrade or a
   reliable reconfiguration mechanism for an already initialized guest.
 - The pinned `k3s_version` controls new guests. Upgrade existing guests deliberately,

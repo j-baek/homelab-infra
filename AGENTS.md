@@ -32,7 +32,7 @@
 Recheck current source and live results before relying on this snapshot.
 
 - Terraform lives in `terraform/`; the local connection is `qemu:///system`.
-  `versions.tf` and the lockfile select libvirt 0.9.2. Do not copy legacy syntax.
+  `versions.tf` and the lockfile select libvirt 0.9.9. Do not copy legacy syntax.
 - `main.tf` retains the shared `libvirt_pool.default` with `prevent_destroy`,
   provisions an Ubuntu base, per-node qcow2 overlays, and the dedicated NAT network.
   The shared pool contains an unrelated Debian image: preserve it.

@@ -5,8 +5,7 @@ locals {
   server_ip      = local.node_ips[local.server_name]
 }
 
-# This shared pool predates the lab and contains unrelated images. Keep its
-# existing Terraform address; reject deletion/replacement while it is declared.
+# Storage pool for managing storage volumes
 resource "libvirt_pool" "default" {
   name   = var.storage_pool_name
   type   = "dir"
@@ -16,8 +15,8 @@ resource "libvirt_pool" "default" {
   }
 }
 
-# Overlays depend on this image for unchanged blocks. Do not overwrite or delete
-# the base while dependent disks exist. Downloading happens during creation only.
+# Download the Ubuntu cloud image into the storage pool as a shared base.
+# Each VM disk below uses this volume as its qcow2 backing image.
 resource "libvirt_volume" "ubuntu_base" {
   name   = var.ubuntu_base_name
   pool   = libvirt_pool.default.name
@@ -25,12 +24,14 @@ resource "libvirt_volume" "ubuntu_base" {
   create = { content = { url = var.ubuntu_base_url } }
 }
 
+# Create a disk for each node, using the shared base image as a backing store.
 resource "libvirt_volume" "k3s_disk" {
-  for_each = var.nodes
-  name     = "${var.cluster_name}-${each.key}.qcow2"
-  pool     = libvirt_pool.default.name
-  capacity = each.value.disk_gib * 1024 * 1024 * 1024
-  target   = { format = { type = "qcow2" } }
+  for_each      = var.nodes
+  name          = "${var.cluster_name}-${each.key}.qcow2"
+  pool          = libvirt_pool.default.name
+  capacity      = each.value.disk_gib
+  capacity_unit = "GiB"
+  target        = { format = { type = "qcow2" } }
   backing_store = {
     path   = libvirt_volume.ubuntu_base.path
     format = { type = "qcow2" }
