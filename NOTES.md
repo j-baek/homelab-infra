@@ -105,3 +105,18 @@ user files. The mechanism operates on disk data blocks, rather than whole files.
 The overlays still depend on data in the base image. Do not delete or overwrite
 `ubuntu_base` while the overlays depend on it. Copying an overlay alone does not
 produce a complete, independent disk.
+
+## libvirt network
+
+Related code: `libvirt_network.k3s_net` in `terraform/main.tf`. Defaults:
+`terraform/variables.tf`.
+
+The resource creates a private network for the k3s VMs. `bridge.name` names
+the host's virtual bridge, which connects the server and agents. The bridge
+itself also has the gateway IP address set by `ips.address` (`192.168.100.1` by
+default). Traffic between nodes on this subnet stays on the virtual network.
+
+For a destination outside this subnet, a VM sends its packet across the bridge
+to that gateway address. With `forward.mode = "nat"`, libvirt translates and
+forwards outbound traffic through the host. `dhcp.hosts` reserves each VM's IP
+address for its MAC.
