@@ -105,22 +105,3 @@ user files. The mechanism operates on disk data blocks, rather than whole files.
 The overlays still depend on data in the base image. Do not delete or overwrite
 `ubuntu_base` while the overlays depend on it. Copying an overlay alone does not
 produce a complete, independent disk.
-
-### capacity: the disk size presented to the VM
-
-```hcl
-capacity      = each.value.disk_gib
-capacity_unit = "GiB"
-```
-
-With `disk_gib = 30`, the VM gets a virtual disk capacity of 30 GiB. Specifying the
-unit removes the need to multiply by `1024 * 1024 * 1024` to convert to bytes.
-The 30 GiB is the total virtual disk capacity, including Ubuntu; it is not an
-additional 30 GiB on top of Ubuntu's size.
-
-The downloaded `ubuntu_base` image already contains its disk size information.
-`k3s_disk` sets the total virtual disk capacity for each VM separately.
-
-Virtual disk capacity differs from the space actually occupied on the host.
-A copy-on-write overlay consumes more host storage as it stores changed data.
-Declaring three 30 GiB disks does not immediately consume 90 GiB of host storage.
