@@ -18,6 +18,8 @@ These are configurable defaults. All VMs share one physical host: this lab is
 **not highly available**. A host failure stops the entire cluster. Disk capacities
 are virtual maximums; copy-on-write allocation grows as guests write data.
 
+It uses [dmacvicar/libvirt](https://registry.terraform.io/providers/dmacvicar/libvirt/latest/docs) for Terraform provider.
+
 ## Requirements
 
 - Linux x86-64 with hardware virtualization enabled, a usable `/dev/kvm`, and
