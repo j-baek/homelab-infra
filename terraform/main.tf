@@ -1,33 +1,58 @@
-### Base volume ### 
-# Download Ubuntu 24.04 cloud image and store it as a base volume.
-resource "libvirt_volume" "ubuntu_base" {
-  name = "ubuntu-24.04-base.qcow2"
-  pool = "default"
-  target = {
-    format = {
-      type = "qcow2"
-    }
-  }
+locals {
+  ssh_public_key = trimspace(file(pathexpand(var.ssh_public_key_path)))
+  server_name    = one([for name, node in var.nodes : name if node.role == "server"])
+  node_ips       = { for name, node in var.nodes : name => cidrhost(var.network_cidr, node.host_number) }
+  server_ip      = local.node_ips[local.server_name]
+}
 
-  create = {
-    content = {
-      url = "https://cloud-images.ubuntu.com/releases/24.04/release/ubuntu-24.04-server-cloudimg-amd64.img"
-    }
+# Storage pool for managing storage volumes
+resource "libvirt_pool" "default" {
+  name   = var.storage_pool_name
+  type   = "dir"
+  target = { path = var.storage_pool_path }
+  lifecycle {
+    prevent_destroy = true
   }
 }
 
-### Overlay disk for k3s VM
-# The actual disk the VM will use.
-# It only stores what changes, and the base (ubuntu) stays untouched.
-resource "libvirt_volume" "k3s_disk" {
-  name     = "k3s.qcow2"
-  pool     = "default"
-  capacity = 107374182400 # 100 GB storage for VM
+# Download the Ubuntu cloud image into the storage pool as a shared base.
+# Each VM disk below uses this volume as its qcow2 backing image.
+resource "libvirt_volume" "ubuntu_base" {
+  name   = var.ubuntu_base_name
+  pool   = libvirt_pool.default.name
+  target = { format = { type = "qcow2" } }
+  create = { content = { url = var.ubuntu_base_url } }
+}
 
+# Create a disk for each node, using the shared base image as a backing store.
+resource "libvirt_volume" "k3s_disk" {
+  for_each      = var.nodes
+  name          = "${var.cluster_name}-${each.key}.qcow2"
+  pool          = libvirt_pool.default.name
+  capacity      = each.value.disk_gib
+  capacity_unit = "GiB"
+  target        = { format = { type = "qcow2" } }
   backing_store = {
-    path = libvirt_volume.ubuntu_base.path
-    format = {
-      type = "qcow2"
-    }
+    path   = libvirt_volume.ubuntu_base.path
+    format = { type = "qcow2" }
   }
+}
+
+# Guests use DHCP; matching MAC reservations make their addresses predictable.
+# Only declared nodes need addresses, so there is no unreserved DHCP range.
+resource "libvirt_network" "k3s_net" {
+  name      = var.network_name
+  autostart = true
+  forward   = { mode = "nat" }
+  bridge    = { name = var.bridge_name }
+  ips = [{
+    family  = "ipv4"
+    address = cidrhost(var.network_cidr, 1)
+    netmask = cidrnetmask(var.network_cidr)
+    dhcp = { hosts = [for name, node in var.nodes : {
+      name = "${var.cluster_name}-${name}"
+      mac  = node.mac
+      ip   = local.node_ips[name]
+    }] }
+  }]
 }
