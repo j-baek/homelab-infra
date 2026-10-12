@@ -58,10 +58,9 @@ Recheck current source and live results before relying on this snapshot.
 
 - Make focused changes, preserve unrelated user edits, and explain consequential
   choices in plain language. Update documentation when behavior changes.
-- Use `scripts/tf.sh ...` for Terraform deployment: it restricts file permissions
-  and puts token-bearing provider seed ISOs in a private temporary directory.
-  The underlying command is `terraform -chdir=terraform ...`. Check the actual
-  Terraform version and selected provider before relying on their behavior.
+- Run Terraform directly from the repository root with `terraform -chdir=terraform ...`.
+  Check the actual Terraform version and selected provider before relying on their
+  behavior. No repository wrapper configures a private temporary directory.
 - For libvirt attributes, inspect `terraform -chdir=terraform providers schema -json`
   when available and consult official documentation for the pinned version. Do not
   copy legacy provider syntax or newer-version examples without checking compatibility.

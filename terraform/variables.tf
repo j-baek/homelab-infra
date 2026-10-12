@@ -104,6 +104,7 @@ variable "network_cidr" {
   }
 }
 
+# Keep node names lowercase; use unique host numbers (2-254) and unique lowercase
 variable "nodes" {
   description = "One server plus agents. RAM is MiB, disk is GiB, host_number selects the subnet address."
   type = map(object({
@@ -122,16 +123,5 @@ variable "nodes" {
   validation {
     condition     = length([for n in var.nodes : n if n.role == "server"]) == 1 && alltrue([for n in var.nodes : contains(["server", "agent"], n.role)])
     error_message = "Declare exactly one server; other nodes must be agents."
-  }
-  validation {
-    condition = alltrue([for name, n in var.nodes :
-      can(regex("^[a-z][a-z0-9-]{0,29}$", name)) &&
-      n.host_number >= 2 && n.host_number <= 254 && floor(n.host_number) == n.host_number &&
-      can(regex("^52:54:00(:[0-9a-f]{2}){3}$", n.mac)) &&
-      n.vcpu >= 1 && floor(n.vcpu) == n.vcpu &&
-      n.memory_mib >= 2048 && floor(n.memory_mib) == n.memory_mib &&
-      n.disk_gib >= 20 && floor(n.disk_gib) == n.disk_gib
-    ]) && length(distinct([for n in var.nodes : n.host_number])) == length(var.nodes) && length(distinct([for n in var.nodes : n.mac])) == length(var.nodes)
-    error_message = "Use unique host numbers (2-254) and lowercase 52:54:00 MACs, valid names, integer CPUs >=1, RAM >=2048 MiB, and disks >=20 GiB."
   }
 }

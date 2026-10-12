@@ -47,12 +47,84 @@ ip -4 route
 The VM subnet must not overlap your LAN, Docker, or VPN networks. Also account for
 k3s's default pod/service networks when connecting other networks later.
 
+## Prepare a new Ubuntu 24.04 laptop
+
+These host setup steps are for a fresh Ubuntu 24.04 x86-64 laptop. Other Linux
+distributions need equivalent packages and libvirt configuration. Enable Intel
+VT-x or AMD-V in firmware if necessary, then install the host tools:
+
+```bash
+sudo apt update
+sudo apt install qemu-kvm libvirt-daemon-system libvirt-clients \
+  genisoimage cpu-checker python3 openssh-client git openssl
+sudo adduser "$USER" libvirt
+```
+
+Log out and back in so the new group membership takes effect. Install a Terraform
+CLI version accepted by `terraform/versions.tf` (at least 1.15, below 2.0) using
+the [official Terraform installation instructions](https://developer.hashicorp.com/terraform/install).
+The provider is downloaded by `terraform -chdir=terraform init -lockfile=readonly` later;
+do not install a different libvirt provider by hand.
+
+Verify hardware acceleration and access to the **system** libvirt connection as
+your normal user:
+
+```bash
+kvm-ok
+ls -l /dev/kvm
+virsh -c qemu:///system list --all
+terraform version
+```
+
+The `default` libvirt storage pool is a name for a host directory, normally
+`/var/lib/libvirt/images`. It may already exist after installing libvirt. Check
+before creating anything:
+
+```bash
+virsh -c qemu:///system pool-list --all
+virsh -c qemu:///system pool-dumpxml default
+```
+
+If `default` is **absent**, define and start a directory pool at the path used by
+this repository. `pool-build` creates the directory if needed. Run these commands
+only when the pool is absent:
+
+```bash
+virsh -c qemu:///system pool-define-as default dir --target /var/lib/libvirt/images
+virsh -c qemu:///system pool-build default
+virsh -c qemu:///system pool-start default
+virsh -c qemu:///system pool-autostart default
+```
+
+If it is already defined but inactive, start it instead of defining it again:
+`virsh -c qemu:///system pool-start default`. If autostart is disabled, enable it
+with `virsh -c qemu:///system pool-autostart default`. Confirm that the pool XML
+shows the intended path and `pool-info default` says it is running. Do not
+replace or delete an existing pool to make its settings match; inspect its
+contents and choose matching values for `storage_pool_name` and
+`storage_pool_path` in your private tfvars file.
+
+Create an SSH key if you do not already have one, and keep the private key on the
+host. The default public-key path is `~/.ssh/id_ed25519.pub`:
+
+```bash
+ssh-keygen -t ed25519 -f ~/.ssh/id_ed25519
+test -s ~/.ssh/id_ed25519.pub
+```
+
+Clone this repository onto the laptop. Before provisioning, run the host checks
+in the Requirements section, confirm enough free RAM and disk space, and check that
+`192.168.100.0/24` does not overlap any host, LAN, Docker, or VPN route. Then
+continue with **Configure and deploy**. If you are moving an existing cluster
+rather than building a fresh one, read the backup and recovery section in
+`NOTES.md` first; a fresh apply does not restore its data or identity.
+
 ## Configure and deploy
 
-Run commands from the repository root. `scripts/tf.sh` invokes Terraform with a
-private temporary directory and restrictive file-creation permissions. Use it
-for deployment so generated seed ISOs remain private. Existing operators should preserve their
-current `terraform.tfvars` and state; do not overwrite them with example files.
+Run commands from the repository root. `terraform -chdir=terraform` runs Terraform
+using the configuration in the `terraform/` directory. Existing operators should
+preserve their current `terraform.tfvars` and state; do not overwrite them with
+example files.
 
 For a new checkout:
 
@@ -66,10 +138,14 @@ Put that newly generated secret in `k3s_token` in your private tfvars file. Do n
 use the example placeholder. Set optional overrides in the same file; all inputs
 and validation rules are in `terraform/variables.tf`.
 
+The local tfvars file is the current approach. Moving `k3s_token` to HashiCorp
+Vault or another secrets manager is planned; that integration is not implemented
+yet.
+
 ```bash
-./scripts/tf.sh init -lockfile=readonly
-./scripts/tf.sh fmt -check -recursive
-./scripts/tf.sh validate
+terraform -chdir=terraform init -lockfile=readonly
+terraform -chdir=terraform fmt -check -recursive
+terraform -chdir=terraform validate
 ```
 
 **Existing shared storage pool:** this repository retains the address
@@ -77,8 +153,8 @@ and validation rules are in `terraform/variables.tf`.
 exists but a fresh Terraform state does not contain it, import it once:
 
 ```bash
-./scripts/tf.sh state list
-./scripts/tf.sh import libvirt_pool.default default
+terraform -chdir=terraform state list
+terraform -chdir=terraform import libvirt_pool.default default
 ```
 
 Do not import again when it is already managed. Match `storage_pool_name` and
@@ -91,8 +167,8 @@ Create and review a private saved plan:
 mkdir -p .local
 chmod 700 .local
 umask 077
-./scripts/tf.sh plan -out=../.local/lab.tfplan
-./scripts/tf.sh apply ../.local/lab.tfplan
+terraform -chdir=terraform plan -out=../.local/lab.tfplan
+terraform -chdir=terraform apply ../.local/lab.tfplan
 python3 scripts/lab.py check --wait 900
 ```
 
@@ -232,7 +308,6 @@ for that distinction.
 | `terraform/domains.tf` | VM hardware, disk attachments, and autostart |
 | `terraform/templates/` | Retryable installer and systemd service |
 | `terraform/outputs.tf` | Non-secret node inventory for helper commands |
-| `scripts/tf.sh` | Terraform wrapper with private temporary files and permissions |
 | `scripts/lab.py` | Readiness, SSH, kubectl, smoke test, credentials, backup |
 | `examples/smoke.yaml` | Small removable application used for live verification |
 | `tests/` | Checks that readiness rejects unhealthy or misaddressed nodes |
@@ -241,9 +316,9 @@ for that distinction.
 | `AGENTS.md` | Instructions for evidence-based agent work in this repository |
 
 ```bash
-./scripts/tf.sh fmt -check -recursive
-./scripts/tf.sh validate
-./scripts/tf.sh test
+terraform -chdir=terraform fmt -check -recursive
+terraform -chdir=terraform validate
+terraform -chdir=terraform test
 python3 -m unittest discover -s tests -v
 ```
 

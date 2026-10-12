@@ -46,9 +46,14 @@ host free space as guests grow.
 Seed media contains the join token and public-key configuration. The provider
 builds a local ISO, then a libvirt volume uploads it to the pool. Pool seed files
 use restricted permissions. The provider itself creates temporary ISO files with
-mode 0644, so `scripts/tf.sh` sets TMPDIR inside the private `.local/tmp` directory.
-Do not bypass that wrapper when creating seed media. Terraform state and plan files also contain secrets,
-even when CLI output marks values sensitive.
+mode 0644 in the environment's temporary directory. Terraform is run directly;
+the repository does not configure a private temporary directory. Terraform state
+and plan files also contain secrets, even when CLI output marks values sensitive.
+
+Planned follow-up: move token storage and retrieval from local tfvars to HashiCorp
+Vault or another secrets manager. This is not implemented yet. The migration must
+also address how the token reaches guests; changing its source alone does not
+remove copies from Terraform state or seed media.
 
 ## Networking
 
@@ -136,7 +141,7 @@ The installed provider schema is the authority for supported attributes. Legacy
 libvirt examples often use incompatible nesting. Check it with:
 
 ```bash
-./scripts/tf.sh providers schema -json
+terraform -chdir=terraform providers schema -json
 ```
 
 The pool reports uploaded CD-ROM media as `iso`, while QEMU reads the attached

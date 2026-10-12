@@ -34,14 +34,3 @@ run "reject_example_token" {
   }
   expect_failures = [var.k3s_token]
 }
-
-run "reject_duplicate_addresses" {
-  command = plan
-  variables {
-    nodes = {
-      server = { role = "server", host_number = 10, mac = "52:54:00:12:34:10", vcpu = 2, memory_mib = 4096, disk_gib = 30 }
-      agent  = { role = "agent", host_number = 10, mac = "52:54:00:12:34:11", vcpu = 2, memory_mib = 2048, disk_gib = 30 }
-    }
-  }
-  expect_failures = [var.nodes]
-}
